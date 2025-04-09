@@ -3,18 +3,43 @@ from pydantic import BaseModel
 from typing import Dict, List
 import random
 import uvicorn
+import time
 
 app = FastAPI()
 
-# Mock data
-order_books = {
-    "BOND": {
-        "bids": [{"price": 999.5, "size": 10}, {"price": 999.0, "size": 20}],
-        "asks": [{"price": 1000.5, "size": 10}, {"price": 1001.0, "size": 20}]
-    }
-}
+# Mock data with dynamic prices
+class MockExchange:
+    def __init__(self):
+        self.base_price = 1000.0
+        self.last_update = time.time()
+        self.order_books = {
+            "BOND": {
+                "bids": [],
+                "asks": []
+            }
+        }
+        self.update_prices()
 
-positions = {}
+    def update_prices(self):
+        current_time = time.time()
+        if current_time - self.last_update >= 1.0:  # Update every second
+            # Add some random movement to base price
+            self.base_price += random.uniform(-1.0, 1.0)
+            
+            # Generate new order book
+            self.order_books["BOND"] = {
+                "bids": [
+                    {"price": round(self.base_price - 0.5, 2), "size": random.randint(5, 15)},
+                    {"price": round(self.base_price - 1.0, 2), "size": random.randint(5, 15)}
+                ],
+                "asks": [
+                    {"price": round(self.base_price + 0.5, 2), "size": random.randint(5, 15)},
+                    {"price": round(self.base_price + 1.0, 2), "size": random.randint(5, 15)}
+                ]
+            }
+            self.last_update = current_time
+
+mock_exchange = MockExchange()
 
 class Order(BaseModel):
     symbol: str
@@ -32,9 +57,10 @@ class Convert(BaseModel):
 
 @app.get("/book/{symbol}")
 async def get_order_book(symbol: str):
-    if symbol not in order_books:
+    if symbol not in mock_exchange.order_books:
         raise HTTPException(status_code=404, detail="Symbol not found")
-    return order_books[symbol]
+    mock_exchange.update_prices()
+    return mock_exchange.order_books[symbol]
 
 @app.post("/orders")
 async def place_order(order: Order):
@@ -56,7 +82,7 @@ async def cancel_order(cancel: CancelOrder):
 
 @app.get("/positions")
 async def get_positions():
-    return positions
+    return {}
 
 @app.post("/convert")
 async def convert(convert: Convert):
